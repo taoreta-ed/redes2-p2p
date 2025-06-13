@@ -1,16 +1,26 @@
-Asociaciones entre equipos y cómo interactúan:
-Seeder -> Tracker:
+Diagrama de Tareas y Asociaciones:
+Seeder registra su disponibilidad de chunks con el Tracker.
 
-El Seeder se registra periódicamente en el Tracker. Esta acción informa al Tracker sobre qué chunks están disponibles. El Seeder también puede actualizar su estado para indicar que ha dejado de estar disponible para compartir ciertos chunks.
+Leecher consulta el Tracker para obtener la lista de Seeders.
 
-Tracker -> Leecher:
+El Leecher solicita chunks de los Seeders.
 
-El Leecher consulta al Tracker para obtener la lista de Seeders disponibles. El Tracker devuelve la información sobre los Seeders que tienen los chunks que el Leecher necesita. En función de esta información, el Leecher selecciona un Seeder y realiza la solicitud de descarga.
+El Seeder sirve los chunks solicitados por el Leecher.
 
-Leecher -> Seeder:
+Leecher se convierte en mini-Seeder, compartiendo los chunks descargados con otros Leechers.
 
-El Leecher solicita chunks específicos del Seeder. El Seeder, que ya ha registrado su disponibilidad en el Tracker, acepta la solicitud y comienza a enviar los chunks al Leecher.
+Tracker:
 
-Seeder -> Leecher:
+El Tracker se ejecuta primero. Su función es ser el coordinador de todos los nodos. Mantiene una base de datos que guarda qué Seeders tienen qué chunks disponibles. Además, maneja las solicitudes de los Leechers que buscan los chunks disponibles en la red.
 
-El Seeder también puede informar al Tracker sobre la disponibilidad de nuevos chunks para que los Leechers actualicen su lista de necesidades y solicitudes.
+Seeder:
+
+Los Seeders se registran en el Tracker con los chunks que están dispuestos a compartir. Los Seeders esperan solicitudes de los Leechers, que les piden los chunks de los archivos que necesitan descargar.
+
+Cuando un Leecher solicita un chunk, el Seeder envía ese chunk al Leecher a través de un socket.
+
+Leecher:
+
+El Leecher se conecta al Tracker para obtener la lista de Seeders que tienen los chunks necesarios. Luego, se conecta a un Seeder que tiene los chunks que necesita y los descarga.
+
+El Leecher también puede actuar como mini-Seeder, compartiendo los chunks descargados con otros Leechers, lo que mejora la eficiencia de la red P2P.

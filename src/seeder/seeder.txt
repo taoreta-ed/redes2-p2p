@@ -1,23 +1,19 @@
-Actividades del equipo Seeder
-División del archivo en chunks
+Tareas:
 
-Desarrollar la lógica que divide un archivo grande en fragmentos (chunks). Cada chunk debe tener un tamaño adecuado para que los otros nodos puedan descargarlo eficientemente.
+Implementación de la División de Archivos:
 
-Crear una función que lea un archivo, lo divida en partes y lo almacene de manera que cada chunk pueda ser accedido de forma independiente.
+Desarrollar el código para dividir el archivo de 4 GB en chunks (fragmentos) de tamaño adecuado y generar los checksums correspondientes para asegurar la integridad de los datos.
 
-Gestión de conexiones con los Leechers
+Servidor de Chunks:
 
-Desarrollar la lógica para recibir solicitudes de los Leechers y enviarles los chunks solicitados.
+Codificar la lógica para que el Seeder pueda servir los chunks solicitados a otros nodos a través de sockets, manejando múltiples conexiones de forma concurrente.
 
-Implementar la comunicación mediante sockets TCPUDP, de forma que el Seeder pueda gestionar múltiples conexiones concurrentes.
+Registro en el Tracker:
 
-Registro en el Tracker
+Implementar la funcionalidad para que el Seeder se registre automáticamente en el Tracker, y anuncie su disponibilidad para compartir chunks o archivos.
 
-Crear un sistema para que el Seeder se registre en el Tracker, proporcionando su disponibilidad y los chunks que tiene para compartir.
+Asociación con otros equipos:
 
-Implementar el mecanismo de actualización periódica de los datos en el Tracker sobre qué chunks están disponibles.
+El Seeder interactúa con el Tracker para registrar la disponibilidad de chunks, y con el Leecher para enviar los chunks solicitados.
 
-Asociaciones con otros equipos
-Con el equipo Tracker El Seeder debe comunicarse con el Tracker para informar sobre los chunks que tiene disponibles. El Seeder también debe obtener la lista de Leechers que necesitan esos chunks.
-
-Con el equipo Leecher El Seeder responderá a las solicitudes del Leecher, enviando los chunks solicitados. La comunicación se realizará a través de un socket.
+Se deben manejar las conexiones concurrentes entre Seeder y los Leechers.

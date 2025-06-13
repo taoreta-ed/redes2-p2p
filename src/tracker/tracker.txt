@@ -1,21 +1,21 @@
-Actividades del equipo Tracker:
-Gestión de la base de datos de nodos:
+Tareas:
 
-Desarrollar la base de datos o estructura para almacenar información sobre los nodos activos, los Seeders registrados, y los chunks que tienen disponibles.
+Implementación del Servidor Tracker:
 
-Implementar un sistema para que el Tracker reciba información sobre los Seeders activos, actualice sus estados y proporcione la lista de chunks disponibles.
+Desarrollar el servidor ligero que actúa como punto de encuentro para los nodos, escuchando en un puerto específico las conexiones entrantes de los Seeders y Leechers.
 
-Manejo de solicitudes de Leechers:
+Registro y Gestión de Nodos:
 
-Crear una función para que los Leechers se conecten al Tracker y obtengan información sobre qué Seeders tienen los chunks que necesitan.
+Codificar la lógica para registrar las direcciones IP y puertos de los nodos que se conectan, manteniendo una lista actualizada de los Seeders y Leechers activos en la red.
 
-Desarrollar un sistema para manejar múltiples solicitudes de Leechers de manera concurrente.
+Internamiento de Metadatos:
 
-Sincronización de la información:
+Implementar la funcionalidad para que el Tracker responda a las solicitudes de los Leechers enviándoles la lista de nodos disponibles, facilitando la búsqueda de Seeders.
 
-El Tracker debe mantener actualizado en tiempo real quién tiene qué chunks disponibles, y también puede tener que informar a los Seeders sobre qué Leechers están solicitando ciertos chunks.
+Manejo de Conexiones Concurrentes:
 
-Asociaciones con otros equipos:
-Con el equipo Seeder: El Tracker recibe la información de los Seeders, incluyendo los chunks disponibles y las actualizaciones periódicas sobre la disponibilidad de los archivos.
+Desarrollar el sistema para que el Tracker pueda manejar múltiples conexiones simultáneas de nodos que se registran o solicitan información, utilizando hilos o programación asíncrona.
 
-Con el equipo Leecher: El Tracker proporciona la lista de Seeders que pueden ayudar a un Leecher a completar la descarga de su archivo, según los chunks que tiene disponibles.
+Asociación con otros equipos:
+
+El Tracker gestiona la información de los Seeders y Leechers, proporcionando la lista de Seeders al Leecher y gestionando los registros de los Seeders.

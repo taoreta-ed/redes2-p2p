@@ -1,21 +1,23 @@
-Actividades del equipo Leecher
-Solicitud de chunks
+Tareas:
 
-Desarrollar la lógica para que el Leecher solicite los chunks a los Seeders. Esto incluye la creación de un sistema que se comunique con el Tracker para obtener la lista de Seeders activos y sus chunks disponibles.
+Conexión al Tracker:
 
-Crear un mecanismo que permita al Leecher elegir qué chunks solicitar, dependiendo de los que no tenga aún.
+Desarrollar el código para que el Leecher se conecte al Tracker, solicite la lista de nodos disponibles en la red P2P y obtenga la información sobre los chunks disponibles.
 
-Gestión de conexiones con los Seeders
+Solicitud y Recepción de Chunks:
 
-Implementar la lógica para conectar al Leecher con el Seeder adecuado y recibir los chunks que le faltan.
+Implementar la lógica para que el Leecher pueda solicitar chunks a otros Seeders (o Leechers), y recibirlos a través de sockets, incluyendo la verificación de su integridad usando los checksums.
 
-Gestionar la descarga de los chunks y garantizar que se reciban completamente antes de proceder a la siguiente solicitud.
+Capacidad de Compartir Chunks (Mini-Seeder):
 
-Reconstrucción del archivo
+Desarrollar la lógica para que el Leecher se convierta en un "mini-Seeder" y comparta los chunks descargados con otros Leechers que lo necesiten.
 
-Una vez que el Leecher tenga todos los chunks necesarios, desarrollar una función para ensamblarlos de nuevo en un solo archivo.
+Gestión del Progreso de Descarga:
 
-Asociaciones con otros equipos
-Con el equipo Tracker El Leecher consulta el Tracker para obtener información sobre los Seeders disponibles y los chunks que estos ofrecen.
+Desarrollar una forma de mostrar el progreso de la descarga del archivo al usuario.
 
-Con el equipo Seeder El Leecher realiza solicitudes de chunks a los Seeders, los recibe y los utiliza para reconstruir el archivo.
+Asociación con otros equipos:
+
+El Leecher se conecta al Tracker para obtener la lista de Seeders disponibles, y luego solicita chunks a los Seeders.
+
+También puede compartir los chunks que ha descargado con otros Leechers.
