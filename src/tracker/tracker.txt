@@ -1,0 +1,21 @@
+Actividades del equipo Tracker:
+Gestión de la base de datos de nodos:
+
+Desarrollar la base de datos o estructura para almacenar información sobre los nodos activos, los Seeders registrados, y los chunks que tienen disponibles.
+
+Implementar un sistema para que el Tracker reciba información sobre los Seeders activos, actualice sus estados y proporcione la lista de chunks disponibles.
+
+Manejo de solicitudes de Leechers:
+
+Crear una función para que los Leechers se conecten al Tracker y obtengan información sobre qué Seeders tienen los chunks que necesitan.
+
+Desarrollar un sistema para manejar múltiples solicitudes de Leechers de manera concurrente.
+
+Sincronización de la información:
+
+El Tracker debe mantener actualizado en tiempo real quién tiene qué chunks disponibles, y también puede tener que informar a los Seeders sobre qué Leechers están solicitando ciertos chunks.
+
+Asociaciones con otros equipos:
+Con el equipo Seeder: El Tracker recibe la información de los Seeders, incluyendo los chunks disponibles y las actualizaciones periódicas sobre la disponibilidad de los archivos.
+
+Con el equipo Leecher: El Tracker proporciona la lista de Seeders que pueden ayudar a un Leecher a completar la descarga de su archivo, según los chunks que tiene disponibles.

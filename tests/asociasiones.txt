@@ -1,0 +1,16 @@
+Asociaciones entre equipos y cómo interactúan:
+Seeder -> Tracker:
+
+El Seeder se registra periódicamente en el Tracker. Esta acción informa al Tracker sobre qué chunks están disponibles. El Seeder también puede actualizar su estado para indicar que ha dejado de estar disponible para compartir ciertos chunks.
+
+Tracker -> Leecher:
+
+El Leecher consulta al Tracker para obtener la lista de Seeders disponibles. El Tracker devuelve la información sobre los Seeders que tienen los chunks que el Leecher necesita. En función de esta información, el Leecher selecciona un Seeder y realiza la solicitud de descarga.
+
+Leecher -> Seeder:
+
+El Leecher solicita chunks específicos del Seeder. El Seeder, que ya ha registrado su disponibilidad en el Tracker, acepta la solicitud y comienza a enviar los chunks al Leecher.
+
+Seeder -> Leecher:
+
+El Seeder también puede informar al Tracker sobre la disponibilidad de nuevos chunks para que los Leechers actualicen su lista de necesidades y solicitudes.
