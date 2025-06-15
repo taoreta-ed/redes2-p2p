@@ -40,14 +40,26 @@ def reconstruct_file():
             with open(os.path.join(CHUNK_DIR, chunk_name), 'rb') as chunk:
                 f.write(chunk.read())  # Escribir cada chunk en el archivo final
 
+# Función para conectar al tracker y obtener la lista de chunks disponibles por peer
+def get_peer_chunks(peer_ip):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((peer_ip, TRACKER_PORT))  # Conexión al tracker o al Seeder para obtener los chunks
+    s.sendall(f"GET_CHUNKS {peer_ip}".encode())  # Solicitar los chunks disponibles para ese peer
+    chunk_list = s.recv(1024).decode()
+    chunks = chunk_list.split(",")  # Convertir la respuesta en una lista de chunks disponibles
+    s.close()
+    return chunks
+
 # Función principal del Leecher
 def start_leecher():
     peers = discover_peers()  # Obtener los peers disponibles
 
     for peer_ip in peers:
-        for i in range(0, 100):  # Suponiendo que hay 100 chunks
-            chunk_name = f"part_{i}"
-            download_chunk(peer_ip, chunk_name)  # Descargar cada chunk desde los peers
+        chunks = get_peer_chunks(peer_ip)  # Obtener la lista de chunks de cada peer
+        
+        # Descargar cada chunk desde el peer
+        for chunk_name in chunks:
+            download_chunk(peer_ip, chunk_name)  # Descargar el chunk
 
     # Una vez descargados todos los chunks, reconstruir el archivo completo
     reconstruct_file()
