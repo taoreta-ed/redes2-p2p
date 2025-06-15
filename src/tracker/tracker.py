@@ -50,14 +50,14 @@ def tracker_server():
         print(f"Conexión establecida con {addr}")
         threading.Thread(target=handle_client, args=(conn,), daemon=True).start()
 
-# Función para descubrir peers a través del tracker
+# Función para descubrir peers a través del tracker (utilizando UDP)
 def discover_peers():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)  # Habilitar broadcast
     s.settimeout(3)  # Tiempo de espera para respuesta
 
     # Enviar un mensaje de descubrimiento de peer en la red local
-    s.sendto(b"DISCOVER", ("<broadcast>", DISCOVERY_PORT))
+    s.sendto(b"DISCOVER", ("<broadcast>", DISCOVERY_PORT))  # Enviar mensaje de broadcast UDP
     
     peers = set()  # Conjunto de peers encontrados
 
