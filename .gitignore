@@ -1,0 +1,5 @@
+# Ignorar la carpeta chunks
+chunks/
+
+# Ignorar el archivo 5GB_file.bin
+5GB_file.bin
