@@ -2,10 +2,12 @@ import socket
 import os
 import hashlib
 import ast 
+import threading
 
 # Parámetros de configuración
 TRACKER_PORT = 8000  # Puerto en el que escucha el tracker
-PEER_PORT = 6000  # Puerto donde el leecher escuchará para recibir los archivos
+PEER_PORT = 6001  # Puerto donde el leecher escuchará para recibir los archivos
+CHUNCK_DIR = "chunks"
 DISCOVERY_PORT = 7000  # Puerto para el descubrimiento de peers
 
 # Crear directorio para los chunks
@@ -76,9 +78,12 @@ def download_chunk(peer_ip, chunk_name, expected_checksum):
 # Función para reconstruir el archivo descargado
 def reconstruct_file():
     with open("received_video.mp4", 'wb') as f:
-        for chunk_name in os.listdir(CHUNK_DIR):
+        chunk_files = [f for f in os.listdir(CHUNK_DIR) if f.startswith("part_")]
+        for chunk_name in sorted(chunk_files, key=lambda x: int(x.split('_')[1])):
             with open(os.path.join(CHUNK_DIR, chunk_name), 'rb') as chunk:
-                f.write(chunk.read())  # Escribir cada chunk en el archivo final
+                f.write(chunk.read())
+    print("Archivo reconstruido exitosamente.")
+
 
 # Función para conectar al tracker y obtener la lista de chunks disponibles por peer
 def get_peer_chunks(peer_ip):
@@ -90,31 +95,84 @@ def get_peer_chunks(peer_ip):
     s.close()
     return chunks
 
+# Mini seeder: otro peer se conecta y pide un chunk, esta funcion verifica que exista, si es asi, lo abre y lo envía por sockets al peer, de lo contrario, da un mensaje de error
+def handle_client(conn):
+    chunk_name = conn.recv(1024).decode()
+    path = os.path.join(CHUNK_DIR, chunk_name)
+    #verifica si el chunk existe
+    if os.path.exists(path):
+        with open(path, 'rb') as f:
+            while data := f.read(4096):
+                conn.sendall(data)
+    else:
+        conn.sendall(b"ERROR: Chunk no encontrado.")
+    conn.close()
+
+#Lanza un servidor TCP, el cual permite que se puedan compartir varios chuncks a la vez, incluso mientras esta descargando
+def peer_server():
+    # Crea un socket TCP para el mini-seeder
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # Asigna el socket al puerto 6000
+    s.bind(("", PEER_PORT))
+    # Escucha conexiones entrantes
+    s.listen(5)
+    print(f"Mini-seeder activo en el puerto {PEER_PORT}")
+
+    while True:
+        conn, addr = s.accept()
+        threading.Thread(target=handle_client, args=(conn,), daemon=True).start()
+
+
+# Función para registrar al leecher como mini-seeder en el tracker
+def register_as_seeder(peer_ip, chunks):
+    #se conecta al tracker 
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.connect(("localhost", TRACKER_PORT))
+        message = f"REGISTER {peer_ip} " + " ".join(chunks)
+        s.sendall(message.encode())
+        response = s.recv(1024).decode()
+        print(f"Registrado como mini-seeder en tracker: {response}")
+    except Exception as e:
+        print(f"Error al registrar como mini-seeder: {e}")
+    finally:
+        s.close()
+
+
 # Función principal del Leecher
 def start_leecher():
+    # Iniciar el servidor mini-seeder en un hilo paralelo
+    threading.Thread(target=peer_server, daemon=True).start()
+
     peers = discover_peers()
 
     for peer_ip in peers:
-        download_checksums(peer_ip)  # Obtenemos el archivo de checksums y sus hashes
+        if peer_ip == "localhost":
+            # Descarga archivo de checksums del Seeder
+            checksums = download_checksums(peer_ip)
+            break
+    else:
+        print("No se pudo obtener checksums de ningún peer.")
+        return
 
-        #lee los archivos linea por linea y guarda los datos en un diccionario
-        checksums = {}
-        with open(os.path.join(CHUNK_DIR, "checksums.txt"), 'r') as f:
-            for line in f:
-                name, hashval = line.strip().split()
-                checksums[name] = hashval
+    for chunk_name, expected_checksum in checksums.items():
+        path = os.path.join(CHUNK_DIR, chunk_name)
+        if not os.path.exists(path):
+            download_chunk(peer_ip, chunk_name, expected_checksum)
 
-        # Obtenemos los nombres de los chunks a descargar
-        chunks = checksums.keys()
+    # Obtiene la lista de chunks descargados
+    downloaded_chunks = [
+        fname for fname in os.listdir(CHUNK_DIR)
+        if fname.startswith("part_")
+    ]
 
-        #para cada chunk verifica que ya lo tiene para no volverlo a descargar, verifica que su hash sea correcto
-        for chunk_name in chunks:
-            if not os.path.exists(os.path.join(CHUNK_DIR, chunk_name)):
-                download_chunk(peer_ip, chunk_name, checksums[chunk_name])
+    # Registra al mini-seeder en el tracker
+    register_as_seeder("localhost", downloaded_chunks)
 
-    # Una vez descargados todos los chunks, reconstruir el archivo completo
     reconstruct_file()
-    print("Archivo reconstruido exitosamente.")
+
+
+
 
 if __name__ == "__main__":
     start_leecher()  # Inicia el leecher
