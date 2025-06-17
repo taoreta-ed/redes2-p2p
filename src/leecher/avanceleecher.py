@@ -52,7 +52,7 @@ def verify_chunk(path, expected_checksum):
 # Función para descubrir peers a través del tracker
 def discover_peers():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect(("localhost", TRACKER_PORT))  # Conectar al tracker
+    s.connect(("8.12.0.166", TRACKER_PORT))  # Conectar al tracker
     s.sendall(b"DISCOVER")  # Solicitar lista de peers disponibles
     data = s.recv(1024).decode()  # Recibir la lista de peers
     peers = ast.literal_eval(data)  # Convierte el string a lista real
@@ -131,7 +131,7 @@ def register_as_seeder(peer_ip, chunks):
     #se conecta al tracker 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        s.connect(("localhost", TRACKER_PORT))
+        s.connect(("8.12.0.166", TRACKER_PORT))
         message = f"REGISTER {peer_ip} " + " ".join(chunks)
         s.sendall(message.encode())
         response = s.recv(1024).decode()
@@ -153,7 +153,7 @@ def start_leecher():
     peers = discover_peers()
 
     for peer_ip in peers:
-        if peer_ip == "localhost":
+        if peer_ip == "8.12.0.166":
             # Descarga archivo de checksums del Seeder
             checksums = download_checksums(peer_ip)
             break
@@ -193,7 +193,7 @@ def start_leecher():
     ]
 
     # Registra al mini-seeder en el tracker
-    register_as_seeder("localhost", downloaded_chunks)
+    register_as_seeder("8.12.0.166", downloaded_chunks)
 
     reconstruct_file()
 

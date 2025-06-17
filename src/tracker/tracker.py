@@ -76,7 +76,7 @@ def discover_peers():
 def register_peer(peer_ip, file_list):
     # Conectarse al tracker para registrar el peer
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect(("localhost", TRACKER_PORT))  # Conexión al tracker
+    s.connect(("8.12.0.166", TRACKER_PORT))  # Conexión al tracker
     registration_message = f"REGISTER {peer_ip} " + " ".join(file_list)
     s.sendall(registration_message.encode())
     response = s.recv(1024).decode()

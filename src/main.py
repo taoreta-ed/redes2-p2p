@@ -19,7 +19,7 @@ def check_port(port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(1)  # Tiempo de espera para la conexión
     try:
-        s.connect(("localhost", port))
+        s.connect(("8.12.0.166", port))
         s.close()
         return True
     except (socket.timeout, socket.error):

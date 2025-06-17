@@ -48,7 +48,7 @@ def split_file(filepath):
 # Función para registrar el seeder en el tracker
 def register_peer(peer_ip, file_list):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect(("localhost", TRACKER_PORT))  # Conectar al tracker
+    s.connect(("8.12.0.166", TRACKER_PORT))  # Conectar al tracker
     registration_message = f"REGISTER {peer_ip} " + " ".join(file_list)
     s.sendall(registration_message.encode())  # Enviar el registro al tracker
     response = s.recv(1024).decode()
@@ -85,7 +85,7 @@ def start_seeder():
     parts = split_file(VIDEO_FILE)
 
     # Registrar el seeder en el tracker
-    peer_ip = "localhost"  # Cambia esto a tu IP si estás usando una red diferente
+    peer_ip = "8.12.0.166"  # Cambia esto a tu IP si estás usando una red diferente
     register_peer(peer_ip, parts)  # Registrar en el tracker
 
     # Iniciar el servidor del seeder
