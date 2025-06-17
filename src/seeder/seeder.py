@@ -2,12 +2,14 @@
 import socket
 import os
 import time
+import hashlib
 
 # Parámetros de configuración
 TRACKER_PORT = 8000  # Puerto en el que escucha el tracker
 PEER_PORT = 6000  # Puerto donde el seeder escuchará para enviar los archivos
 DISCOVERY_PORT = 7000  # Puerto para el descubrimiento de peers
-VIDEO_FILE = r'./src/test.jpg'  # El archivo que vamos a compartir
+VIDEO_FILE ='test_file.bin' #para pruebas
+#VIDEO_FILE = r'D:\REDES-2\Proyecto\redes2-p2p\src\5GB_file.bin'  # El archivo que vamos a compartir
 
 # Crear directorio para los chunks
 CHUNK_DIR = "chunks"
@@ -16,14 +18,31 @@ os.makedirs(CHUNK_DIR, exist_ok=True)
 # Función para dividir el archivo en chunks
 def split_file(filepath):
     parts = []
+
+    #Creamos un diccionrio para guardar los hashes
+    checksums ={}
+    
     with open(filepath, 'rb') as f:
         index = 0
         while chunk := f.read(10 * 1024 * 1024):  # Tamaño de 10MB por chunk
+
+            #Guardamos cda parte en un archivo nuevo
             part_name = f"part_{index}"
-            with open(os.path.join(CHUNK_DIR, part_name), 'wb') as p:
+            part_path = os.path.join(CHUNK_DIR, part_name)
+            with open(part_path, 'wb') as p:
                 p.write(chunk)
+
+            #Calculamos el SHA-256 recien guardado y lo agregamos en el diccionario checksums para verificar la integridad del archivo
+            checksum = calculate_sha256(part_path)
+            checksums[part_name] = checksum
             parts.append(part_name)
             index += 1
+
+    #Guardamos los checksums en un archivo para verificar la integridad del archivo
+    with open(os.path.join(CHUNK_DIR, "checksums.txt"), 'w') as f:
+        for name, chksum in checksums.items():
+            f.write(f"{name} {chksum}\n")
+
     return parts
 
 # Función para registrar el seeder en el tracker
@@ -44,6 +63,8 @@ def handle_client(conn):
         with open(path, 'rb') as f:
             while data := f.read(4096):
                 conn.sendall(data)  # Envia el chunk al cliente
+    else:
+        conn.sendall(b"ERROR: Archivo no encontrado")
     conn.close()
 
 # Función del servidor del seeder: escucha y acepta conexiones
@@ -69,6 +90,15 @@ def start_seeder():
 
     # Iniciar el servidor del seeder
     peer_server()
+
+#Funcion para calcular el hash SHA-256 de un archivo
+#lee el archivo en pedazos, lee la "huella digital" de cada chunck. Si la huella digital es la misma, quiere decir que todo esta bien
+def calculate_sha256(file_path):
+    sha256 = hashlib.sha256()
+    with open(file_path, 'rb') as f:
+        while chunk := f.read(8192):
+            sha256.update(chunk)
+    return sha256.hexdigest()
 
 if __name__ == "__main__":
     start_seeder()  # Inicia el seeder
