@@ -132,7 +132,7 @@ def download_chunk(peer_ip, peer_port, chunk_name, expected_checksum):
         s.close() # Asegura que el socket se cierre.
 
 # Función para reconstruir el archivo completo a partir de los chunks descargados.
-def reconstruct_file(output_filename="received_frieren.jpeg"):
+def reconstruct_file(output_filename="received_peli.mp4"):
     output_path = os.path.join(os.getcwd(), output_filename) # Guarda en el directorio actual
     print(f"Reconstruyendo archivo en {output_path}...")
     
