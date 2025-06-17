@@ -9,9 +9,9 @@ SEEDER_PORT = 6000  # Puerto para el seeder
 LEECHER_PORT = 6001  # Puerto para el leecher
 
 # Ruta absoluta donde están los scripts
-TRACKER_SCRIPT = r'D:\REDES-2\Proyecto\redes2-p2p\src\tracker\tracker.py'
-SEEDER_SCRIPT = r'D:\REDES-2\Proyecto\redes2-p2p\src\seeder\seeder.py'
-LEECHER_SCRIPT = r'D:\REDES-2\Proyecto\redes2-p2p\src\leecher\leecher.py'
+TRACKER_SCRIPT = r'\tracker\tracker.py'
+SEEDER_SCRIPT = r'\seeder\seeder.py'
+LEECHER_SCRIPT = r'\leecher\leecher.py'
 
 # Función para verificar si un puerto está abierto
 def check_port(port):
