@@ -8,7 +8,7 @@ import hashlib
 TRACKER_PORT = 8000  # Puerto en el que escucha el tracker
 PEER_PORT = 6000  # Puerto donde el seeder escuchará para enviar los archivos
 DISCOVERY_PORT = 7000  # Puerto para el descubrimiento de peers
-VIDEO_FILE ='test_file.bin' #para pruebas
+VIDEO_FILE ='./src/seeder/frieren.jpeg' #para pruebas
 #VIDEO_FILE = r'D:\REDES-2\Proyecto\redes2-p2p\src\5GB_file.bin'  # El archivo que vamos a compartir
 
 # Crear directorio para los chunks

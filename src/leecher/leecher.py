@@ -78,7 +78,7 @@ def download_chunk(peer_ip, chunk_name, expected_checksum):
 
 # Función para reconstruir el archivo descargado
 def reconstruct_file():
-    with open("received_video.mp4", 'wb') as f:
+    with open("received_frieren.jpeg", 'wb') as f:
         chunk_files = [f for f in os.listdir(CHUNK_DIR) if f.startswith("part_")]
         for chunk_name in sorted(chunk_files, key=lambda x: int(x.split('_')[1])):
             with open(os.path.join(CHUNK_DIR, chunk_name), 'rb') as chunk:
