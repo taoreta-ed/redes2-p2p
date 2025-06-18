@@ -3,6 +3,8 @@ import os
 import time
 import hashlib
 import threading
+import tkinter as tk
+from tkinter import filedialog, ttk
 
 # Parámetros de configuración del Seeder
 TRACKER_PORT = 8000         # Puerto del tracker al que el seeder se conectará para registrarse
@@ -10,19 +12,17 @@ PEER_PORT = 6000            # Puerto donde el seeder escuchará conexiones de ot
 DISCOVERY_PORT = 7000       # Puerto para el descubrimiento de peers (UDP, no usado directamente en el flujo TCP)
 
 # La dirección IP que el seeder usará para registrarse en el tracker y para escuchar conexiones.
-TARGET_IP = "8.12.0.166" 
-
-# Ruta al archivo de video/imagen que se va a compartir.
-# Es importante que esta ruta sea correcta y el archivo exista.
-VIDEO_FILE = './src/seeder/frieren.jpeg' 
-# VIDEO_FILE = r'D:\REDES-2\Proyecto\redes2-p2p\src\5GB_file.bin' # Ejemplo de archivo grande
+TARGET_IP = "127.0.0.1" 
 
 # Directorio donde se almacenarán los chunks del archivo original.
 CHUNK_DIR = "chunks_seeder" # Cambiado a 'chunks_seeder' para evitar colisiones con el leecher
-os.makedirs(CHUNK_DIR, exist_ok=True) # Asegura que el directorio de chunks exista.
+os.makedirs(CHUNK_DIR, exist_ok=True) # Asegura que el directorio exista.
+
+# Variable global para almacenar la ruta del archivo seleccionado
+VIDEO_FILE = None
+ORIGINAL_FILENAME = None
 
 # Función para calcular el hash SHA-256 de un archivo dado.
-# Es crucial para verificar la integridad de los chunks en el lado del leecher.
 def calculate_sha256(file_path):
     sha256 = hashlib.sha256()
     with open(file_path, 'rb') as f:
@@ -31,7 +31,6 @@ def calculate_sha256(file_path):
     return sha256.hexdigest()        # Retorna el hash hexadecimal completo.
 
 # Función para dividir el archivo original en chunks más pequeños.
-# También calcula el checksum SHA-256 para cada chunk y los guarda.
 def split_file(filepath):
     parts = []      # Lista para almacenar los nombres de los chunks creados.
     checksums = {}  # Diccionario para almacenar los checksums (nombre_chunk: hash).
@@ -44,8 +43,8 @@ def split_file(filepath):
     try:
         with open(filepath, 'rb') as f:
             index = 0
-            # Lee el archivo en chunks de 10 MB (10 * 1024 * 1024 bytes).
-            while chunk := f.read(10 * 1024 * 1024):
+            # Lee el archivo en chunks de 30 MB (30 * 1024 * 1024 bytes).
+            while chunk := f.read(30 * 1024 * 1024):
                 part_name = f"part_{index}"
                 part_path = os.path.join(CHUNK_DIR, part_name)
                 
@@ -61,9 +60,10 @@ def split_file(filepath):
         print(f"Archivo dividido en {index} chunks.")
 
         # Guarda todos los checksums en un archivo `checksums.txt` en el CHUNK_DIR.
-        # Este archivo será descargado por los leechers para verificar la integridad.
         checksums_filepath = os.path.join(CHUNK_DIR, "checksums.txt")
         with open(checksums_filepath, 'w') as f:
+            # Añadir el nombre original del archivo como primera línea
+            f.write(f"ORIGINAL_FILENAME {os.path.basename(filepath)}\n")
             for name, chksum in checksums.items():
                 f.write(f"{name} {chksum}\n")
         print(f"Checksums guardados en {checksums_filepath}")
@@ -75,7 +75,6 @@ def split_file(filepath):
     return parts # Retorna la lista de nombres de los chunks.
 
 # Función para registrar el seeder en el tracker.
-# Informa al tracker sobre su IP:PUERTO y los archivos (chunks) que ofrece.
 def register_peer(peer_ip, peer_port, file_list):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -93,33 +92,44 @@ def register_peer(peer_ip, peer_port, file_list):
         s.close() # Asegura que el socket se cierre.
 
 # Función para manejar las solicitudes entrantes de chunks de otros peers.
-# Se ejecuta en un hilo separado por cada conexión para no bloquear el servidor.
 def handle_client_request(conn, addr):
     try:
         # Recibe el nombre del chunk solicitado por el cliente.
         part_name = conn.recv(1024).decode().strip() 
         print(f"Solicitud de chunk '{part_name}' de {addr[0]}:{addr[1]}")
         
-        # Construye la ruta completa al chunk en el directorio local.
-        path = os.path.join(CHUNK_DIR, part_name)
-        
-        if os.path.exists(path):
-            with open(path, 'rb') as f:
-                # Lee el chunk en bloques y lo envía al cliente.
-                while data := f.read(4096):
-                    conn.sendall(data) 
-            print(f"Enviado {part_name} a {addr[0]}:{addr[1]}")
+        # Cuando un cliente solicita checksums.txt, añadir el nombre original
+        if part_name == "checksums.txt":
+            path = os.path.join(CHUNK_DIR, part_name)
+            if os.path.exists(path):
+                with open(path, 'rb') as f:
+                    # Lee el chunk en bloques y lo envía al cliente.
+                    while data := f.read(4096):
+                        conn.sendall(data) 
+                print(f"Enviado {part_name} a {addr[0]}:{addr[1]}")
+            else:
+                conn.sendall(b"ERROR: Archivo no encontrado")
+                print(f"Archivo '{part_name}' no encontrado para {addr[0]}:{addr[1]}")
         else:
-            # Si el chunk no existe, envía un mensaje de error.
-            conn.sendall(b"ERROR: Archivo no encontrado")
-            print(f"Chunk '{part_name}' no encontrado para {addr[0]}:{addr[1]}")
+            # Construye la ruta completa al chunk en el directorio local.
+            path = os.path.join(CHUNK_DIR, part_name)
+            
+            if os.path.exists(path):
+                with open(path, 'rb') as f:
+                    # Lee el chunk en bloques y lo envía al cliente.
+                    while data := f.read(4096):
+                        conn.sendall(data) 
+                print(f"Enviado {part_name} a {addr[0]}:{addr[1]}")
+            else:
+                # Si el chunk no existe, envía un mensaje de error.
+                conn.sendall(b"ERROR: Archivo no encontrado")
+                print(f"Chunk '{part_name}' no encontrado para {addr[0]}:{addr[1]}")
     except Exception as e:
         print(f"Error al manejar la solicitud del cliente {addr[0]}:{addr[1]}: {e}")
     finally:
         conn.close() # Cierra la conexión después de atender la solicitud.
 
 # Función principal del servidor del seeder.
-# Escucha conexiones entrantes en el PEER_PORT para servir chunks.
 def peer_server():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -140,21 +150,80 @@ def peer_server():
     finally:
         s.close() # Asegura que el socket del servidor se cierre.
 
+# Interfaz gráfica para seleccionar archivo
+def select_file():
+    global VIDEO_FILE, ORIGINAL_FILENAME
+    file_path = filedialog.askopenfilename(
+        title="Seleccionar archivo para compartir",
+        filetypes=[
+            ("Todos los archivos", "*.*"),
+            ("Videos", "*.mp4 *.mkv *.avi *.mov"),
+            ("Imágenes", "*.jpg *.jpeg *.png"),
+            ("Documentos", "*.pdf *.docx *.txt")
+        ]
+    )
+    if file_path:
+        VIDEO_FILE = file_path
+        ORIGINAL_FILENAME = os.path.basename(file_path)
+        file_label.config(text=f"Archivo seleccionado: {ORIGINAL_FILENAME}")
+        start_button.config(state=tk.NORMAL)
+
+# Función para iniciar el seeder después de seleccionar un archivo
+def start_seeder_process():
+    global VIDEO_FILE
+    if VIDEO_FILE:
+        window.destroy()  # Cerrar la ventana de TKinter
+        
+        # 1. Divide el archivo seleccionado en chunks y genera sus checksums.
+        parts = split_file(VIDEO_FILE)
+        if not parts:
+            print("No se pudieron generar chunks. Abortando seeder.")
+            return
+
+        # 2. Registra el seeder en el tracker con la lista de chunks que ofrece.
+        register_peer(TARGET_IP, PEER_PORT, parts) 
+
+        # 3. Inicia el servidor del seeder, que estará escuchando para servir los chunks.
+        peer_server()
+
+# Crear la ventana principal
+window = tk.Tk()
+window.title("Seeder - Selección de archivo")
+window.geometry("500x300")
+
+# Configurar el estilo
+style = ttk.Style()
+style.configure("TButton", font=("Arial", 12))
+style.configure("TLabel", font=("Arial", 12))
+
+# Marco principal
+main_frame = ttk.Frame(window, padding=20)
+main_frame.pack(fill=tk.BOTH, expand=True)
+
+# Título
+title_label = ttk.Label(main_frame, text="Selecciona un archivo para compartir", font=("Arial", 16, "bold"))
+title_label.pack(pady=20)
+
+# Botón para seleccionar archivo
+select_button = ttk.Button(main_frame, text="Seleccionar archivo", command=select_file)
+select_button.pack(pady=10)
+
+# Etiqueta para mostrar el archivo seleccionado
+file_label = ttk.Label(main_frame, text="Ningún archivo seleccionado")
+file_label.pack(pady=10)
+
+# Botón para iniciar el seeder
+start_button = ttk.Button(main_frame, text="Iniciar Seeder", command=start_seeder_process, state=tk.DISABLED)
+start_button.pack(pady=20)
+
+# Información adicional
+info_label = ttk.Label(main_frame, text="El archivo seleccionado será dividido en chunks y compartido")
+info_label.pack(pady=10)
+
 # Función principal que inicia el proceso del Seeder.
 def start_seeder():
-    # 1. Divide el archivo de video/imagen en chunks y genera sus checksums.
-    parts = split_file(VIDEO_FILE)
-    if not parts:
-        print("No se pudieron generar chunks. Abortando seeder.")
-        return
-
-    # 2. Registra el seeder en el tracker con la lista de chunks que ofrece.
-    # Usa la IP objetivo y el puerto del seeder.
-    register_peer(TARGET_IP, PEER_PORT, parts) 
-
-    # 3. Inicia el servidor del seeder, que estará escuchando para servir los chunks.
-    # Este bucle `peer_server()` es bloqueante y se ejecuta indefinidamente.
-    peer_server()
+    # Iniciar la interfaz gráfica para seleccionar un archivo
+    window.mainloop()
 
 # Punto de entrada principal del script.
 if __name__ == "__main__":

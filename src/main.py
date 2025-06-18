@@ -17,7 +17,7 @@ LEECHER_SCRIPT = r'./src/leecher/leecher.py'
 
 # La dirección IP a la que los clientes (seeder/leecher) se conectarán para el tracker
 # y entre ellos. Has cambiado 'localhost' a esta IP específica.
-TARGET_IP = "8.12.0.166"
+TARGET_IP = "127.0.0.1"
 
 # Función para verificar si un puerto está abierto en una dirección IP específica.
 # Esto es útil para saber si un servicio ya se está ejecutando.
@@ -30,6 +30,8 @@ def check_port(ip, port):
         return True  # El puerto está ocupado
     except (socket.timeout, socket.error):
         return False # El puerto está libre
+    finally:
+        s.close()
 
 # Función para ejecutar un script Python como un proceso separado.
 # Esto permite que el tracker, seeder y leecher se ejecuten concurrentemente.
