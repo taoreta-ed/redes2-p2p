@@ -12,7 +12,7 @@ PEER_PORT = 6000            # Puerto donde el seeder escuchará conexiones de ot
 DISCOVERY_PORT = 7000       # Puerto para el descubrimiento de peers (UDP, no usado directamente en el flujo TCP)
 
 # La dirección IP que el seeder usará para registrarse en el tracker y para escuchar conexiones.
-TARGET_IP = "127.0.0.1" 
+TARGET_IP = "8.12.0.166" 
 
 # Directorio donde se almacenarán los chunks del archivo original.
 CHUNK_DIR = "chunks_seeder" # Cambiado a 'chunks_seeder' para evitar colisiones con el leecher
