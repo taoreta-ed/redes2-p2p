@@ -43,8 +43,8 @@ def split_file(filepath):
     try:
         with open(filepath, 'rb') as f:
             index = 0
-            # Lee el archivo en chunks de 30 MB (30 * 1024 * 1024 bytes).
-            while chunk := f.read(30 * 1024 * 1024):
+            # Lee el archivo en chunks de 50 MB (50 * 1024 * 1024 bytes).
+            while chunk := f.read(50 * 1024 * 1024):
                 part_name = f"part_{index}"
                 part_path = os.path.join(CHUNK_DIR, part_name)
                 
@@ -215,10 +215,6 @@ file_label.pack(pady=10)
 # Botón para iniciar el seeder
 start_button = ttk.Button(main_frame, text="Iniciar Seeder", command=start_seeder_process, state=tk.DISABLED)
 start_button.pack(pady=20)
-
-# Información adicional
-info_label = ttk.Label(main_frame, text="El archivo seleccionado será dividido en chunks y compartido")
-info_label.pack(pady=10)
 
 # Función principal que inicia el proceso del Seeder.
 def start_seeder():
