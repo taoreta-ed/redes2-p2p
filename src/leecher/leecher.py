@@ -141,7 +141,7 @@ def reconstruct_file():
     os.makedirs(shared_dir, exist_ok=True)
     
     # Usar el nombre original del archivo si está disponible, o un nombre por defecto
-    base_filename = ORIGINAL_FILENAME if ORIGINAL_FILENAME else "received_peli.mp4"
+    base_filename = ORIGINAL_FILENAME if ORIGINAL_FILENAME else "received_file.mp4"
     
     # Comprobar si el archivo ya existe para evitar sobrescritura
     output_filename = base_filename
@@ -167,15 +167,43 @@ def reconstruct_file():
     # La función lambda extrae el número del nombre del chunk para la ordenación.
     sorted_chunks = sorted(chunk_files, key=lambda x: int(x.split('_')[1]))
     
+    # Calcular el tamaño total para mostrar progreso
+    total_size = sum(os.path.getsize(os.path.join(CHUNK_DIR, chunk)) for chunk in sorted_chunks)
+    print(f"Reconstruyendo archivo de {total_size/(1024*1024*1024):.2f} GB")
+    
+    reconstruction_successful = False
     try:
+        # Usar un buffer grande para mejorar el rendimiento
+        BUFFER_SIZE = 4 * 1024 * 1024  # 4MB buffer
+        bytes_written = 0
+        start_time = time.time()
+        
         with open(output_path, 'wb') as f:
             for chunk_name in sorted_chunks:
                 chunk_full_path = os.path.join(CHUNK_DIR, chunk_name)
                 try:
+                    chunk_size = os.path.getsize(chunk_full_path)
                     with open(chunk_full_path, 'rb') as chunk:
-                        f.write(chunk.read()) # Lee y escribe el contenido de cada chunk.
+                        # Leer y escribir en bloques grandes
+                        while data := chunk.read(BUFFER_SIZE):
+                            f.write(data)
+                            bytes_written += len(data)
+                            
+                    # Mostrar progreso cada 100MB
+                    if bytes_written % (100 * 1024 * 1024) < chunk_size:
+                        elapsed = time.time() - start_time
+                        percent = (bytes_written / total_size) * 100
+                        speed = bytes_written / (1024 * 1024 * elapsed) if elapsed > 0 else 0
+                        remaining = (total_size - bytes_written) / (bytes_written / elapsed) if bytes_written > 0 and elapsed > 0 else 0
+                        print(f"Progreso: {bytes_written/(1024*1024*1024):.2f}GB/{total_size/(1024*1024*1024):.2f}GB ({percent:.1f}%) - {speed:.2f}MB/s - ETA: {remaining/60:.1f}min")
+                        
                 except Exception as e:
                     print(f"Error al leer el chunk {chunk_name} durante la reconstrucción: {e}")
+        
+        end_time = time.time()
+        total_elapsed = end_time - start_time
+        final_speed = total_size / (1024 * 1024 * total_elapsed) if total_elapsed > 0 else 0
+        print(f"Archivo reconstruido en {total_elapsed:.1f} segundos ({final_speed:.2f}MB/s)")
         
         # Intentar establecer permisos de lectura/escritura para todos los usuarios
         try:
@@ -186,8 +214,12 @@ def reconstruct_file():
             print(f"Advertencia al establecer permisos: {e}")
             
         print(f"Archivo reconstruido exitosamente como {output_filename} en la carpeta RecursosCompartidos.")
+        print(f"Tamaño final: {os.path.getsize(output_path)/(1024*1024*1024):.2f} GB")
+        reconstruction_successful = True
     except Exception as e:
         print(f"Error al crear el archivo reconstruido: {e}")
+        
+    return reconstruction_successful
 
 # Esta función maneja las solicitudes entrantes de otros leechers/seeders
 # que quieren descargar un chunk de este mini-seeder (el leecher actual).

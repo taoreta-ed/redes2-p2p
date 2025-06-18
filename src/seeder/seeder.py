@@ -40,11 +40,14 @@ def split_file(filepath):
         print(f"Error: El archivo {filepath} no se encontró.")
         return []
 
+    # Para archivos grandes, usamos chunks de 50 MB
+    CHUNK_SIZE = 50 * 1024 * 1024  # 50 MB en bytes
+    
     try:
         with open(filepath, 'rb') as f:
             index = 0
-            # Lee el archivo en chunks de 50 MB (50 * 1024 * 1024 bytes).
-            while chunk := f.read(50 * 1024 * 1024):
+            # Lee el archivo en chunks de 50 MB
+            while chunk := f.read(CHUNK_SIZE):
                 part_name = f"part_{index}"
                 part_path = os.path.join(CHUNK_DIR, part_name)
                 
@@ -57,7 +60,12 @@ def split_file(filepath):
                 checksums[part_name] = checksum # Almacena el checksum.
                 parts.append(part_name)         # Añade el nombre del chunk a la lista.
                 index += 1
-        print(f"Archivo dividido en {index} chunks.")
+                
+                # Mostrar progreso
+                if index % 10 == 0:
+                    print(f"Progreso: {index} chunks creados...")
+                    
+        print(f"Archivo dividido en {index} chunks de {CHUNK_SIZE/1024/1024} MB cada uno.")
 
         # Guarda todos los checksums en un archivo `checksums.txt` en el CHUNK_DIR.
         checksums_filepath = os.path.join(CHUNK_DIR, "checksums.txt")
@@ -104,7 +112,7 @@ def handle_client_request(conn, addr):
             if os.path.exists(path):
                 with open(path, 'rb') as f:
                     # Lee el chunk en bloques y lo envía al cliente.
-                    while data := f.read(4096):
+                    while data := f.read(8192):  # Aumentado a 8KB
                         conn.sendall(data) 
                 print(f"Enviado {part_name} a {addr[0]}:{addr[1]}")
             else:
@@ -115,11 +123,20 @@ def handle_client_request(conn, addr):
             path = os.path.join(CHUNK_DIR, part_name)
             
             if os.path.exists(path):
+                # Aumentamos el buffer de transferencia a 256KB para mejor rendimiento
+                BUFFER_SIZE = 256 * 1024  # 256KB
                 with open(path, 'rb') as f:
+                    bytes_sent = 0
+                    file_size = os.path.getsize(path)
                     # Lee el chunk en bloques y lo envía al cliente.
-                    while data := f.read(4096):
-                        conn.sendall(data) 
-                print(f"Enviado {part_name} a {addr[0]}:{addr[1]}")
+                    while data := f.read(BUFFER_SIZE):
+                        conn.sendall(data)
+                        bytes_sent += len(data)
+                        # Mostrar progreso cada 5MB
+                        if bytes_sent % (5 * 1024 * 1024) < BUFFER_SIZE:
+                            percent = (bytes_sent / file_size) * 100
+                            print(f"Enviando {part_name}: {bytes_sent/(1024*1024):.2f}MB / {file_size/(1024*1024):.2f}MB ({percent:.1f}%)")
+                print(f"Enviado completo: {part_name} ({file_size/(1024*1024):.2f}MB) a {addr[0]}:{addr[1]}")
             else:
                 # Si el chunk no existe, envía un mensaje de error.
                 conn.sendall(b"ERROR: Archivo no encontrado")
