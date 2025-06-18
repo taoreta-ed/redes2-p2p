@@ -12,7 +12,7 @@ LEECHER_PORT = 6001  # Puerto para el servidor del leecher (como mini-seeder)
 # Ruta absoluta donde están los scripts. Es importante que estas rutas sean correctas
 # con respecto a la ubicación donde se ejecuta main.py.
 TRACKER_SCRIPT = r'tracker/tracker.py'
-SEEDER_SCRIPT = r'.seeder/seeder.py'
+SEEDER_SCRIPT = r'seeder/seeder.py'
 LEECHER_SCRIPT = r'leecher/leecher.py'
 
 # La dirección IP a la que los clientes (seeder/leecher) se conectarán para el tracker
