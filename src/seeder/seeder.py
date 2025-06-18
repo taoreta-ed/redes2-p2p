@@ -45,7 +45,7 @@ def split_file(filepath):
         with open(filepath, 'rb') as f:
             index = 0
             # Lee el archivo en chunks de 10 MB (10 * 1024 * 1024 bytes).
-            while chunk := f.read(10 * 1024 * 1024):
+            while chunk := f.read(20 * 1024 * 1024):
                 part_name = f"part_{index}"
                 part_path = os.path.join(CHUNK_DIR, part_name)
                 
@@ -85,7 +85,7 @@ def register_peer(peer_ip, peer_port, file_list):
         # Construye el mensaje de registro: "REGISTER IP:PUERTO archivo1 archivo2 ..."
         registration_message = f"REGISTER {peer_ip}:{peer_port} " + " ".join(file_list)
         s.sendall(registration_message.encode()) # Envía el mensaje de registro.
-        response = s.recv(1024).decode()         # Recibe la respuesta del tracker.
+        response = s.recv(2048).decode()         # Recibe la respuesta del tracker.
         print(f"Respuesta del tracker al registro: {response}")
     except Exception as e:
         print(f"Error al registrar el seeder en el tracker: {e}")
@@ -97,7 +97,7 @@ def register_peer(peer_ip, peer_port, file_list):
 def handle_client_request(conn, addr):
     try:
         # Recibe el nombre del chunk solicitado por el cliente.
-        part_name = conn.recv(1024).decode().strip() 
+        part_name = conn.recv(2048).decode().strip() 
         print(f"Solicitud de chunk '{part_name}' de {addr[0]}:{addr[1]}")
         
         # Construye la ruta completa al chunk en el directorio local.
@@ -106,7 +106,7 @@ def handle_client_request(conn, addr):
         if os.path.exists(path):
             with open(path, 'rb') as f:
                 # Lee el chunk en bloques y lo envía al cliente.
-                while data := f.read(4096):
+                while data := f.read(5120):
                     conn.sendall(data) 
             print(f"Enviado {part_name} a {addr[0]}:{addr[1]}")
         else:
