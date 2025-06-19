@@ -150,18 +150,23 @@ def handle_client_request(conn, addr):
 def peer_server():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
+        # Permitir reutilización del socket para evitar errores "Address already in use"
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        
         # Vincula el socket a todas las interfaces de red en el PEER_PORT.
         s.bind(("", PEER_PORT)) 
-        s.listen(10) # Permite hasta 10 conexiones pendientes en la cola.
+        s.listen(50) # Aumentado a 50 conexiones pendientes en la cola.
         print(f"Seeder escuchando en el puerto {PEER_PORT}")
         
-        while True:
-            # Acepta una nueva conexión entrante.
-            conn, addr = s.accept()
-            print(f"Conexión establecida con {addr[0]}:{addr[1]}")
-            # Inicia un nuevo hilo para manejar la solicitud, permitiendo que el servidor
-            # acepte nuevas conexiones mientras el chunk se envía.
-            threading.Thread(target=handle_client_request, args=(conn, addr,), daemon=True).start()
+        # Crear un ThreadPoolExecutor para limitar el número máximo de hilos concurrentes
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            while True:
+                # Acepta una nueva conexión entrante.
+                conn, addr = s.accept()
+                print(f"Conexión establecida con {addr[0]}:{addr[1]}")
+                # Envía la solicitud al pool de hilos
+                executor.submit(handle_client_request, conn, addr)
     except Exception as e:
         print(f"Error al iniciar el servidor del seeder: {e}")
     finally:

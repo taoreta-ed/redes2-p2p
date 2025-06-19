@@ -303,6 +303,9 @@ def register_as_seeder(peer_ip, port, chunks):
 
 # Función principal que inicia el proceso del Leecher.
 def start_leecher():
+    # Variables globales necesarias
+    global dynamic_port
+    
     # Crear y anunciar el directorio de recursos compartidos
     shared_dir = os.path.join(os.getcwd(), "RecursosCompartidos")
     os.makedirs(shared_dir, exist_ok=True)
@@ -317,7 +320,8 @@ def start_leecher():
     print(f"Usando puerto: {dynamic_port} para este leecher")
     
     # Usamos el puerto dinámico en vez de la constante global
-    threading.Thread(target=lambda: leecher_peer_server(dynamic_port), daemon=True).start()
+    server_thread = threading.Thread(target=lambda: leecher_peer_server(dynamic_port), daemon=True)
+    server_thread.start()
     
     # Dar un pequeño tiempo para que el mini-seeder inicie.
     time.sleep(1)
@@ -355,23 +359,53 @@ def start_leecher():
             chunks_to_download.append((chunk_name, expected_checksum))
 
     print(f"Chunks a descargar: {len(chunks_to_download)}")
-    for chunk_name, expected_checksum in chunks_to_download:
-        download_chunk(TARGET_IP, SEEDER_PORT, chunk_name, expected_checksum)
-
+    
+    # Determinar el número óptimo de hilos basado en CPU y conexión
+    import multiprocessing
+    optimal_workers = min(8, multiprocessing.cpu_count() + 2)
+    print(f"Utilizando {optimal_workers} hilos para la descarga paralela")
+    
+    # Usar descarga paralela que puede obtener chunks de cualquier peer
+    successful, failed = download_chunks_parallel(
+        chunks_to_download, max_workers=optimal_workers
+    )
+    
+    print(f"Resumen de descarga: {successful} chunks exitosos, {failed} chunks fallidos")
+    
+    # Verificar si la descarga fue completa
+    if failed > 0:
+        print("ADVERTENCIA: No se pudieron descargar todos los chunks. El archivo reconstruido podría estar incompleto.")
+    
     # 5. Obtiene la lista de chunks que el leecher ha descargado y tiene completos y verificados.
     downloaded_chunks = [
         fname for fname in os.listdir(CHUNK_DIR)
         if fname.startswith("part_") and os.path.exists(os.path.join(CHUNK_DIR, fname)) and \
            fname in DOWNLOADED_CHECKSUMS and verify_chunk(os.path.join(CHUNK_DIR, fname), DOWNLOADED_CHECKSUMS[fname])
     ]
-    print(f"Chunks descargados y verificados listos para compartir: {downloaded_chunks}")
+    print(f"Chunks descargados y verificados listos para compartir: {len(downloaded_chunks)}")
 
     # 6. Registra al leecher (ahora un mini-seeder) en el tracker con los chunks que tiene.
     # Usa el puerto dinámico en lugar del puerto fijo
     register_as_seeder(TARGET_IP, dynamic_port, downloaded_chunks)
 
     # 7. Reconstruye el archivo completo a partir de los chunks descargados.
-    reconstruct_file()
+    reconstruction_successful = reconstruct_file()
+
+    # 8. Si la reconstrucción fue exitosa, eliminar la carpeta de chunks
+    if reconstruction_successful:
+        print("Reconstrucción exitosa. Limpiando la carpeta de chunks temporales...")
+        import shutil
+        try:
+            # Esperamos un poco para asegurarnos de que no haya operaciones pendientes sobre los archivos
+            time.sleep(1)
+            # Eliminamos la carpeta y todo su contenido
+            shutil.rmtree(CHUNK_DIR, ignore_errors=True)
+            print(f"Carpeta '{CHUNK_DIR}' eliminada exitosamente.")
+            # Volvemos a crear el directorio vacío para futuras descargas
+            os.makedirs(CHUNK_DIR, exist_ok=True)
+        except Exception as e:
+            print(f"Error al eliminar la carpeta de chunks: {e}")
+            print("Puedes eliminar manualmente la carpeta si lo deseas.")
 
     print("Proceso de leecher completado.")
 
@@ -379,3 +413,131 @@ def start_leecher():
 # Punto de entrada principal del script.
 if __name__ == "__main__":
     start_leecher() # Inicia el leecher
+
+def find_peers_with_chunk(chunk_name):
+    """Encuentra peers que tienen un chunk específico"""
+    print(f"Buscando peers que tienen el chunk {chunk_name}...")
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    peers_list = []
+    try:
+        s.connect((TARGET_IP, TRACKER_PORT))
+        s.sendall(f"FIND_CHUNK {chunk_name}".encode())
+        
+        # Recibir respuesta completa
+        data_chunks = []
+        while True:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            data_chunks.append(chunk)
+        
+        data = b''.join(data_chunks).decode()
+        
+        if data.startswith('[') and data.endswith(']'):
+            try:
+                peers_list = ast.literal_eval(data)
+                print(f"Se encontraron {len(peers_list)} peers con el chunk {chunk_name}")
+            except SyntaxError as e:
+                print(f"Error al procesar la lista de peers: {e}")
+        else:
+            print(f"Respuesta inesperada del tracker: {data[:100]}...")
+    except Exception as e:
+        print(f"Error al buscar peers con el chunk {chunk_name}: {e}")
+    finally:
+        s.close()
+    return peers_list
+
+def download_chunk_from_best_peer(chunk_name, expected_checksum):
+    """Intenta descargar un chunk desde el mejor peer disponible"""
+    # Primero intentar desde el seeder principal
+    if download_chunk(TARGET_IP, SEEDER_PORT, chunk_name, expected_checksum):
+        return True
+    
+    # Si falla, buscar otros peers que tengan el chunk
+    peers_with_chunk = find_peers_with_chunk(chunk_name)
+    
+    # Intentar descargar desde cada peer encontrado hasta que uno funcione
+    for peer_info in peers_with_chunk:
+        try:
+            peer_ip, peer_port_str = peer_info.split(':')
+            peer_port = int(peer_port_str)
+            
+            # No intentar descargarlo de nosotros mismos
+            import socket
+            if (peer_ip == TARGET_IP and peer_port == dynamic_port) or peer_port == LEECHER_SERVER_PORT:
+                continue
+                
+            print(f"Intentando descargar {chunk_name} desde peer alternativo {peer_info}")
+            if download_chunk(peer_ip, peer_port, chunk_name, expected_checksum):
+                print(f"¡Éxito! Chunk {chunk_name} descargado desde {peer_info}")
+                return True
+        except Exception as e:
+            print(f"Error al intentar descargar desde {peer_info}: {e}")
+    
+    print(f"No se pudo descargar el chunk {chunk_name} de ningún peer disponible")
+    return False
+
+# Función actualizada para descargar chunks en paralelo
+def download_chunks_parallel(chunks_to_download, max_workers=5):
+    """Descarga múltiples chunks en paralelo usando hilos"""
+    print(f"Iniciando descarga paralela de {len(chunks_to_download)} chunks con {max_workers} hilos...")
+    
+    # Función que será ejecutada por cada hilo
+    def download_worker(chunk_info):
+        chunk_name, expected_checksum = chunk_info
+        retries = 3  # Número de intentos
+        for attempt in range(retries):
+            if download_chunk_from_best_peer(chunk_name, expected_checksum):
+                return True  # Descarga exitosa
+            if attempt < retries - 1:
+                print(f"Reintentando descarga de {chunk_name} (intento {attempt+2}/{retries})")
+                time.sleep(1)  # Pequeña pausa antes de reintentar
+        return False  # Falló después de todos los intentos
+    
+    # Utilizar ThreadPoolExecutor para gestionar el pool de hilos
+    import concurrent.futures
+    successful_downloads = 0
+    failed_downloads = 0
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Enviar todas las tareas al executor
+        future_to_chunk = {
+            executor.submit(download_worker, chunk_info): chunk_info[0] 
+            for chunk_info in chunks_to_download
+        }
+        
+        # Procesar los resultados a medida que se completan
+        for future in concurrent.futures.as_completed(future_to_chunk):
+            chunk_name = future_to_chunk[future]
+            try:
+                success = future.result()
+                if success:
+                    successful_downloads += 1
+                    # Registrar este chunk inmediatamente para que otros puedan descargarlo
+                    register_single_chunk(TARGET_IP, dynamic_port, chunk_name)
+                else:
+                    failed_downloads += 1
+                # Mostrar progreso
+                total_processed = successful_downloads + failed_downloads
+                percent = (total_processed / len(chunks_to_download)) * 100
+                print(f"Progreso: {total_processed}/{len(chunks_to_download)} chunks ({percent:.1f}%) - Exitosos: {successful_downloads}, Fallidos: {failed_downloads}")
+            except Exception as e:
+                failed_downloads += 1
+                print(f"Error descargando {chunk_name}: {e}")
+    
+    return successful_downloads, failed_downloads
+
+# Función para registrar un solo chunk recién descargado
+def register_single_chunk(peer_ip, port, chunk_name):
+    """Registra un único chunk en el tracker apenas se descarga"""
+    print(f"Registrando chunk {chunk_name} en el tracker...")
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.connect((TARGET_IP, TRACKER_PORT))
+        message = f"REGISTER {peer_ip}:{port} {chunk_name}"
+        s.sendall(message.encode())
+        response = s.recv(1024).decode()
+    except Exception as e:
+        print(f"Error al registrar chunk individual: {e}")
+    finally:
+        s.close()

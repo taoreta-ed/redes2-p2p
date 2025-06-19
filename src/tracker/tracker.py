@@ -1,6 +1,7 @@
 import socket
 import threading
 import time
+import random
 
 # Puerto donde el tracker escucha conexiones de nuevos peers.
 TRACKER_PORT = 8000
@@ -14,10 +15,15 @@ def handle_client(conn, addr):
         print(f"Solicitud de {addr[0]}:{addr[1]}: {data}")
 
         if data == "DISCOVER":
-            # Envía la lista de todos los peers conocidos.
+            # Limitar la cantidad de peers devueltos para evitar respuestas enormes
             peer_list = list(peers.keys())
             
-            # Si hay muchos peers, enviarlo en bloques para evitar problemas
+            # Si hay demasiados peers, enviar un subconjunto (máximo 20 peers aleatorios)
+            if len(peer_list) > 20:
+                peer_list = random.sample(peer_list, 20)
+                print(f"Enviando muestra aleatoria de 20 peers (de un total de {len(peers)}) a {addr[0]}:{addr[1]}")
+            
+            # Enviar la respuesta en bloques
             response = str(peer_list).encode()
             
             # Enviar en bloques de 4KB
@@ -35,9 +41,12 @@ def handle_client(conn, addr):
             parts = data.split()
             if len(parts) >= 2:
                 peer_info = parts[1] # "IP:PUERTO" del peer
-                file_list = parts[2:] # Lista de archivos/chunks que el peer ofrece
+                
+                # Limitar la cantidad de chunks por peer para evitar mensajes enormes
+                file_list = parts[2:100] if len(parts) > 100 else parts[2:] # Máximo 98 chunks
+                
                 peers[peer_info] = file_list # Agrega/actualiza el peer en el diccionario
-                print(f"Nuevo peer registrado: {peer_info} con archivos: {file_list}")
+                print(f"Nuevo peer registrado: {peer_info} con {len(file_list)} chunks")
                 conn.sendall(b"Peer registrado correctamente.")
             else:
                 conn.sendall(b"Formato de registro incorrecto.")
@@ -50,6 +59,18 @@ def handle_client(conn, addr):
                 conn.sendall(",".join(peers[peer_to_query]).encode())
             else:
                 conn.sendall(b"Peer no encontrado.")
+        
+        # Agregar un nuevo comando para solicitar peers que tengan un chunk específico
+        elif data.startswith("FIND_CHUNK"):
+            chunk_name = data.split()[1]
+            peers_with_chunk = []
+            
+            for peer_info, chunks in peers.items():
+                if chunk_name in chunks:
+                    peers_with_chunk.append(peer_info)
+            
+            conn.sendall(str(peers_with_chunk).encode())
+            print(f"Enviada lista de {len(peers_with_chunk)} peers con el chunk {chunk_name}")
 
         else:
             # Comando no reconocido.
@@ -68,8 +89,11 @@ def handle_client(conn, addr):
 def start_tracker():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
+        # Permitir reutilización del socket para evitar errores "Address already in use"
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        
         s.bind(("", TRACKER_PORT)) # Escucha en todas las interfaces de red.
-        s.listen(10)              # Permite hasta 10 conexiones pendientes.
+        s.listen(50)              # Aumentado a 50 conexiones pendientes.
         print(f"Tracker escuchando en el puerto {TRACKER_PORT}")
         
         # Bucle principal para aceptar nuevas conexiones.
