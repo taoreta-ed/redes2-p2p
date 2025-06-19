@@ -16,7 +16,19 @@ def handle_client(conn, addr):
         if data == "DISCOVER":
             # Envía la lista de todos los peers conocidos.
             peer_list = list(peers.keys())
-            conn.sendall(str(peer_list).encode())
+            
+            # Si hay muchos peers, enviarlo en bloques para evitar problemas
+            response = str(peer_list).encode()
+            
+            # Enviar en bloques de 4KB
+            total_sent = 0
+            while total_sent < len(response):
+                sent = conn.send(response[total_sent:total_sent + 4096])
+                if sent == 0:
+                    raise RuntimeError("Socket connection broken")
+                total_sent += sent
+            
+            print(f"Enviada lista de {len(peer_list)} peers ({len(response)} bytes) a {addr[0]}:{addr[1]}")
         
         elif data.startswith("REGISTER"):
             # El mensaje esperado es "REGISTER IP:PUERTO archivo1 archivo2 ..."

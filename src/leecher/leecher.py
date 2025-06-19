@@ -93,9 +93,31 @@ def discover_peers():
     try:
         s.connect((TARGET_IP, TRACKER_PORT)) # Conecta al tracker.
         s.sendall(b"DISCOVER")             # Solicita la lista de peers disponibles.
-        data = s.recv(1024).decode()       # Recibe la lista de peers como string.
-        peers_list = ast.literal_eval(data) # Convierte el string a una lista de Python.
-        print(f"Peers encontrados: {peers_list}")
+        
+        # Recibir toda la respuesta, no solo los primeros 1024 bytes
+        data_chunks = []
+        while True:
+            chunk = s.recv(4096)  # Aumentamos el tamaño de buffer a 4KB
+            if not chunk:
+                break
+            data_chunks.append(chunk)
+        
+        data = b''.join(data_chunks).decode()
+        
+        # Verificar que la respuesta sea válida antes de evaluarla
+        if data.startswith('[') and data.endswith(']'):
+            try:
+                peers_list = ast.literal_eval(data) # Convierte el string a una lista de Python.
+                print(f"Peers encontrados: {len(peers_list)}")
+                if len(peers_list) > 10:  # Si hay muchos peers, solo mostrar algunos
+                    print(f"Primeros 5 peers: {peers_list[:5]} ... y {len(peers_list)-5} más")
+                else:
+                    print(f"Peers encontrados: {peers_list}")
+            except SyntaxError as e:
+                print(f"Error al procesar la lista de peers. Datos recibidos pueden estar corruptos: {e}")
+                print(f"Longitud de datos recibidos: {len(data)} bytes")
+        else:
+            print(f"Respuesta inesperada del tracker: {data[:100]}...")
     except Exception as e:
         print(f"Error al descubrir peers desde el tracker: {e}")
     finally:
