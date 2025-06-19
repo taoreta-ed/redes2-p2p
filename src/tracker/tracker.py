@@ -9,7 +9,23 @@ TRACKER_PORT = 8000
 # Diccionario que mapea "IP:PUERTO" a una lista de archivos/chunks que el peer ofrece.
 peers = {}
 
+# Variables para el contador de conexiones
+active_connections = 0
+connection_lock = threading.Lock()  # Para acceso seguro a la variable desde múltiples hilos
+total_connections = 0  # Total histórico de conexiones
+
 def handle_client(conn, addr):
+    global active_connections, total_connections
+    
+    # Incrementar contadores al iniciar una nueva conexión
+    with connection_lock:
+        active_connections += 1
+        total_connections += 1
+        current_active = active_connections
+        current_total = total_connections
+    
+    print(f"Nueva conexión de {addr[0]}:{addr[1]} | Activas: {current_active} | Total histórico: {current_total}")
+    
     try:
         data = conn.recv(1024).decode()
         print(f"Solicitud de {addr[0]}:{addr[1]}: {data}")
@@ -71,6 +87,18 @@ def handle_client(conn, addr):
             
             conn.sendall(str(peers_with_chunk).encode())
             print(f"Enviada lista de {len(peers_with_chunk)} peers con el chunk {chunk_name}")
+            
+        # Nuevo comando para obtener las estadísticas de conexiones
+        elif data == "STATS":
+            with connection_lock:
+                stats = {
+                    "active_connections": active_connections,
+                    "total_connections": total_connections,
+                    "registered_peers": len(peers),
+                    "total_chunks": sum(len(chunks) for chunks in peers.values())
+                }
+            conn.sendall(str(stats).encode())
+            print(f"Enviando estadísticas al cliente {addr[0]}:{addr[1]}")
 
         else:
             # Comando no reconocido.
@@ -84,7 +112,25 @@ def handle_client(conn, addr):
             pass
     
     finally:
+        # Decrementar contador al finalizar la conexión
+        with connection_lock:
+            active_connections -= 1
+            current_active = active_connections
+        
+        print(f"Conexión cerrada con {addr[0]}:{addr[1]} | Conexiones activas: {current_active}")
         conn.close() # Cierra la conexión después de manejar la solicitud.
+
+# Función para mostrar periódicamente estadísticas en la consola del tracker
+def stats_monitor():
+    while True:
+        time.sleep(10)  # Actualizar cada 10 segundos
+        with connection_lock:
+            print(f"\n--- ESTADÍSTICAS DEL TRACKER ---")
+            print(f"Conexiones activas: {active_connections}")
+            print(f"Total de conexiones: {total_connections}")
+            print(f"Peers registrados: {len(peers)}")
+            print(f"Total chunks compartidos: {sum(len(chunks) for chunks in peers.values())}")
+            print(f"---------------------------\n")
 
 def start_tracker():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -96,10 +142,13 @@ def start_tracker():
         s.listen(50)              # Aumentado a 50 conexiones pendientes.
         print(f"Tracker escuchando en el puerto {TRACKER_PORT}")
         
+        # Iniciar hilo para mostrar estadísticas periódicamente
+        stats_thread = threading.Thread(target=stats_monitor, daemon=True)
+        stats_thread.start()
+        
         # Bucle principal para aceptar nuevas conexiones.
         while True:
             conn, addr = s.accept()
-            print(f"Conexión aceptada de {addr[0]}:{addr[1]}")
             # Inicia un nuevo hilo para manejar la conexión, para no bloquear el tracker.
             threading.Thread(target=handle_client, args=(conn, addr,), daemon=True).start()
     

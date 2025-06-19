@@ -246,6 +246,17 @@ def reconstruct_file():
 # Esta función maneja las solicitudes entrantes de otros leechers/seeders
 # que quieren descargar un chunk de este mini-seeder (el leecher actual).
 def handle_incoming_chunk_request(conn, addr):
+    global active_connections, total_connections
+    
+    # Incrementar contadores
+    with connection_lock:
+        active_connections += 1
+        total_connections += 1
+        current_active = active_connections
+        current_total = total_connections
+    
+    print(f"Nueva conexión de {addr[0]}:{addr[1]} | Activas: {current_active} | Total: {current_total}")
+    
     try:
         chunk_name = conn.recv(1024).decode().strip() # Recibe el nombre del chunk solicitado.
         print(f"Solicitud de chunk '{chunk_name}' de {addr[0]}:{addr[1]}")
@@ -263,6 +274,10 @@ def handle_incoming_chunk_request(conn, addr):
     except Exception as e:
         print(f"Error al manejar la solicitud de chunk entrante de {addr[0]}:{addr[1]}: {e}")
     finally:
+        # Decrementar contador
+        with connection_lock:
+            active_connections -= 1
+        
         conn.close() # Cierra la conexión después de enviar/manejar la solicitud.
 
 # La función `peer_server` del leecher, que permite que actúe como un mini-seeder.
@@ -273,6 +288,20 @@ def leecher_peer_server(port):
         s.bind(("", port))
         s.listen(5)
         print(f"Mini-seeder del leecher activo en el puerto {port}")
+        
+        # Añadir monitor de estadísticas
+        def stats_monitor_leecher():
+            while True:
+                time.sleep(20)  # Actualizar cada 20 segundos
+                with connection_lock:
+                    print(f"\n--- ESTADÍSTICAS DEL LEECHER (MINI-SEEDER) ---")
+                    print(f"Conexiones activas: {active_connections}")
+                    print(f"Total de conexiones atendidas: {total_connections}")
+                    print(f"---------------------------------------\n")
+        
+        # Iniciar hilo de estadísticas
+        stats_thread = threading.Thread(target=stats_monitor_leecher, daemon=True)
+        stats_thread.start()
 
         while True:
             # Acepta nuevas conexiones entrantes.

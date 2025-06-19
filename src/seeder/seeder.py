@@ -22,6 +22,11 @@ os.makedirs(CHUNK_DIR, exist_ok=True) # Asegura que el directorio exista.
 VIDEO_FILE = None
 ORIGINAL_FILENAME = None
 
+# Variables para el contador de conexiones del seeder
+active_connections = 0
+connection_lock = threading.Lock()
+total_connections = 0
+
 # Función para calcular el hash SHA-256 de un archivo dado.
 def calculate_sha256(file_path):
     sha256 = hashlib.sha256()
@@ -101,6 +106,17 @@ def register_peer(peer_ip, peer_port, file_list):
 
 # Función para manejar las solicitudes entrantes de chunks de otros peers.
 def handle_client_request(conn, addr):
+    global active_connections, total_connections
+    
+    # Incrementar contadores
+    with connection_lock:
+        active_connections += 1
+        total_connections += 1
+        current_active = active_connections
+        current_total = total_connections
+    
+    print(f"Nueva conexión de {addr[0]}:{addr[1]} | Activas: {current_active} | Total: {current_total}")
+    
     try:
         # Recibe el nombre del chunk solicitado por el cliente.
         part_name = conn.recv(1024).decode().strip() 
@@ -144,6 +160,12 @@ def handle_client_request(conn, addr):
     except Exception as e:
         print(f"Error al manejar la solicitud del cliente {addr[0]}:{addr[1]}: {e}")
     finally:
+        # Decrementar contador
+        with connection_lock:
+            active_connections -= 1
+            current_active = active_connections
+        
+        print(f"Conexión cerrada con {addr[0]}:{addr[1]} | Conexiones activas: {current_active}")
         conn.close() # Cierra la conexión después de atender la solicitud.
 
 # Función principal del servidor del seeder.
@@ -161,6 +183,10 @@ def peer_server():
         # Crear un ThreadPoolExecutor para limitar el número máximo de hilos concurrentes
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            # Añadir monitor de estadísticas
+            stats_thread = threading.Thread(target=stats_monitor_seeder, daemon=True)
+            stats_thread.start()
+            
             while True:
                 # Acepta una nueva conexión entrante.
                 conn, addr = s.accept()
@@ -171,6 +197,16 @@ def peer_server():
         print(f"Error al iniciar el servidor del seeder: {e}")
     finally:
         s.close() # Asegura que el socket del servidor se cierre.
+
+# Función para mostrar estadísticas del seeder
+def stats_monitor_seeder():
+    while True:
+        time.sleep(15)  # Actualizar cada 15 segundos
+        with connection_lock:
+            print(f"\n--- ESTADÍSTICAS DEL SEEDER ---")
+            print(f"Conexiones activas: {active_connections}")
+            print(f"Total de conexiones atendidas: {total_connections}")
+            print(f"--------------------------\n")
 
 # Interfaz gráfica para seleccionar archivo
 def select_file():
