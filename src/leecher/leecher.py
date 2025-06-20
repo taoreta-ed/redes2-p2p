@@ -14,7 +14,7 @@ LEECHER_SERVER_PORT = 6001  # Puerto donde este leecher escuchará para servir c
 
 # La dirección IP del tracker y, por extensión, la IP de la máquina actual
 # que el leecher usará para registrarse y conectarse a otros peers.
-TARGET_IP = "127.0.0.1"
+TARGET_IP ="10.3.56.88"
 
 # Directorio donde se almacenarán los chunks descargados.
 CHUNK_DIR = "chunks_leecher"
