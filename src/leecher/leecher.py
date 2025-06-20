@@ -4,6 +4,8 @@ import hashlib
 import ast
 import threading
 import time
+import signal
+import sys
 
 # Parámetros de configuración del Leecher
 TRACKER_PORT = 8000         # Puerto del tracker al que el leecher se conecta
@@ -26,6 +28,10 @@ ORIGINAL_FILENAME = None  # Para almacenar el nombre original del archivo
 active_connections = 0
 connection_lock = threading.Lock()  # Para acceso seguro a la variable desde múltiples hilos
 total_connections = 0  # Total histórico de conexiones
+
+# Variables para el modo solo compartir
+exit_flag = False     # Bandera para indicar cuándo terminar el programa
+share_mode = False    # Indica si estamos en modo solo compartir
 
 # Función para calcular el hash SHA-256 de un archivo dado.
 # Utilizado para verificar la integridad de los chunks descargados.
@@ -164,6 +170,7 @@ def download_chunk(peer_ip, peer_port, chunk_name, expected_checksum):
         s.close() # Asegura que el socket se cierre.
 
 # Función para reconstruir el archivo completo a partir de los chunks descargados.
+# Modificar la función reconstruct_file() para garantizar independencia
 def reconstruct_file():
     # Crear directorio "RecursosCompartidos" si no existe
     shared_dir = os.path.join(os.getcwd(), "RecursosCompartidos")
@@ -173,7 +180,7 @@ def reconstruct_file():
     base_filename = ORIGINAL_FILENAME if ORIGINAL_FILENAME else "received_file.mp4"
     
     # Comprobar si el archivo ya existe para evitar sobrescritura
-    output_filename = base_filename
+    output_filename = base_filename  # Definir la variable aquí para asegurar que existe
     counter = 1
     
     while os.path.exists(os.path.join(shared_dir, output_filename)):
@@ -191,6 +198,11 @@ def reconstruct_file():
         if fname.startswith("part_") and os.path.exists(os.path.join(CHUNK_DIR, fname)) and \
            fname in DOWNLOADED_CHECKSUMS and verify_chunk(os.path.join(CHUNK_DIR, fname), DOWNLOADED_CHECKSUMS[fname])
     ]
+
+    # Verificar que tenemos chunks para reconstruir
+    if not chunk_files:
+        print("No se encontraron chunks válidos para reconstruir el archivo.")
+        return False
 
     # Ordena los chunks numéricamente (part_0, part_1, etc.)
     # La función lambda extrae el número del nombre del chunk para la ordenación.
@@ -244,10 +256,10 @@ def reconstruct_file():
             
         print(f"Archivo reconstruido exitosamente como {output_filename} en la carpeta RecursosCompartidos.")
         print(f"Tamaño final: {os.path.getsize(output_path)/(1024*1024*1024):.2f} GB")
-        print("Puedes eliminar manualmente la carpeta chunks_leecher si lo deseas.")
         reconstruction_successful = True
     except Exception as e:
         print(f"Error al crear el archivo reconstruido: {e}")
+        reconstruction_successful = False
         
     return reconstruction_successful
 
@@ -291,35 +303,57 @@ def handle_incoming_chunk_request(conn, addr):
 # La función `peer_server` del leecher, que permite que actúe como un mini-seeder.
 # Escucha en su propio puerto (`LEECHER_SERVER_PORT = 6001`) para servir chunks a otros.
 def leecher_peer_server(port):
+    global exit_flag
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
+        # Permitir reutilización del socket para evitar errores "Address already in use"
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(("", port))
-        s.listen(5)
+        s.listen(10)  # Aceptar hasta 10 conexiones pendientes
         print(f"Mini-seeder del leecher activo en el puerto {port}")
         
         # Añadir monitor de estadísticas
         def stats_monitor_leecher():
-            while True:
+            while not exit_flag:
                 time.sleep(20)  # Actualizar cada 20 segundos
                 with connection_lock:
                     print(f"\n--- ESTADÍSTICAS DEL LEECHER (MINI-SEEDER) ---")
                     print(f"Conexiones activas: {active_connections}")
                     print(f"Total de conexiones atendidas: {total_connections}")
+                    if share_mode:
+                        print(f"Modo: Solo compartir (Mini-seeder)")
+                    else:
+                        print(f"Modo: Leecher completo")
                     print(f"---------------------------------------\n")
         
         # Iniciar hilo de estadísticas
         stats_thread = threading.Thread(target=stats_monitor_leecher, daemon=True)
         stats_thread.start()
 
-        while True:
-            # Acepta nuevas conexiones entrantes.
-            conn, addr = s.accept()
-            # Inicia un nuevo hilo para manejar cada solicitud entrante, para no bloquear el servidor.
-            threading.Thread(target=handle_incoming_chunk_request, args=(conn, addr,), daemon=True).start()
+        # Configurar un timeout para poder verificar exit_flag
+        s.settimeout(1)  # 1 segundo de timeout
+        
+        while not exit_flag:
+            try:
+                # Acepta nuevas conexiones entrantes.
+                conn, addr = s.accept()
+                # Inicia un nuevo hilo para manejar cada solicitud entrante, para no bloquear el servidor.
+                threading.Thread(target=handle_incoming_chunk_request, args=(conn, addr,), daemon=True).start()
+            except socket.timeout:
+                # Timeout normal, solo para verificar exit_flag
+                continue
+            except Exception as e:
+                if not exit_flag:  # Si no estamos cerrando intencionalmente
+                    print(f"Error al aceptar conexión: {e}")
     except Exception as e:
-        print(f"Error al iniciar el servidor mini-seeder del leecher: {e}")
+        if not exit_flag:  # Si no estamos cerrando intencionalmente
+            print(f"Error al iniciar el servidor mini-seeder del leecher: {e}")
     finally:
         s.close() # Cierra el socket del servidor si hay un error o al finalizar.
+        if share_mode:
+            print("Servidor mini-seeder detenido. Finalizado modo compartir.")
+        else:
+            print("Servidor mini-seeder detenido.")
 
 # Función para registrar al leecher como un mini-seeder en el tracker.
 # Informa al tracker qué chunks tiene disponibles para compartir.
@@ -466,16 +500,81 @@ def register_single_chunk(peer_ip, port, chunk_name):
     finally:
         s.close()
 
+# Función para manejar señales (como Ctrl+C)
+def signal_handler(sig, frame):
+    global exit_flag
+    print("\nRecibida señal de terminación. Cerrando de forma segura...")
+    exit_flag = True
+    # Esperar un poco para permitir que los hilos terminen limpiamente
+    time.sleep(2)
+    sys.exit(0)
+
+# Iniciar modo "solo compartir"
+def start_share_only_mode():
+    global share_mode, exit_flag, dynamic_port
+    share_mode = True
+    
+    print("\n=== MODO SOLO COMPARTIR INICIADO ===")
+    print("Este leecher ahora funcionará exclusivamente como mini-seeder.")
+    print("Los archivos se han reconstruido en la carpeta RecursosCompartidos.")
+    print("Tus chunks están disponibles para otros leechers.")
+    print("Presiona Ctrl+C para detener la compartición.\n")
+    
+    # Obtener lista de chunks válidos disponibles
+    available_chunks = [
+        fname for fname in os.listdir(CHUNK_DIR)
+        if fname.startswith("part_") and os.path.exists(os.path.join(CHUNK_DIR, fname)) and \
+           fname in DOWNLOADED_CHECKSUMS and verify_chunk(os.path.join(CHUNK_DIR, fname), DOWNLOADED_CHECKSUMS[fname])
+    ]
+    
+    # Registrarse como seeder para estos chunks
+    if available_chunks:
+        register_as_seeder(TARGET_IP, dynamic_port, available_chunks)
+        print(f"Registrados {len(available_chunks)} chunks para compartir")
+    else:
+        print("No hay chunks disponibles para compartir")
+        return
+    
+    # Configurar manejador de señales para Ctrl+C
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    # Ejecutar un bucle para mantener el programa vivo
+    try:
+        # En lugar de un bucle mientras True, usamos una espera más eficiente
+        while not exit_flag:
+            # Re-registrarse periódicamente para asegurar presencia en el tracker
+            if not exit_flag and (time.time() % 300 < 1):  # Cada ~5 minutos
+                register_as_seeder(TARGET_IP, dynamic_port, available_chunks)
+                print(f"Re-registrados {len(available_chunks)} chunks para compartir")
+            time.sleep(1)
+    except KeyboardInterrupt:
+        # Manejar Ctrl+C como señal para terminar limpiamente
+        exit_flag = True
+        print("\nCompartición finalizada por el usuario.")
+    finally:
+        print("Modo compartir finalizado.")
+
 # Función principal que inicia el proceso del Leecher.
 def start_leecher():
     # Variables globales necesarias
-    global dynamic_port
+    global dynamic_port, exit_flag
     dynamic_port = 0  # Inicializar la variable global
+    
+    # Procesar argumentos de línea de comandos
+    import argparse
+    parser = argparse.ArgumentParser(description='Leecher P2P')
+    parser.add_argument('--share-only', action='store_true', 
+                      help='Iniciar en modo solo compartir (omite la descarga)')
+    args = parser.parse_args()
     
     # Crear y anunciar el directorio de recursos compartidos
     shared_dir = os.path.join(os.getcwd(), "RecursosCompartidos")
     os.makedirs(shared_dir, exist_ok=True)
     print(f"Los archivos descargados se guardarán en: {os.path.abspath(shared_dir)}")
+    
+    # Configurar manejador de señales para Ctrl+C
+    signal.signal(signal.SIGINT, signal_handler)
     
     # Utilizar puerto 0 para que el SO asigne un puerto disponible automáticamente
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -488,6 +587,37 @@ def start_leecher():
     # Usamos el puerto dinámico en vez de la constante global
     server_thread = threading.Thread(target=lambda: leecher_peer_server(dynamic_port), daemon=True)
     server_thread.start()
+    
+    # Si se especificó --share-only, cargar checksums existentes e iniciar modo compartir
+    if args.share_only:
+        try:
+            # Cargar checksums.txt si existe
+            checksums_path = os.path.join(CHUNK_DIR, "checksums.txt")
+            if os.path.exists(checksums_path):
+                # Cargar los checksums en la variable global
+                global DOWNLOADED_CHECKSUMS
+                DOWNLOADED_CHECKSUMS = {}
+                with open(checksums_path, 'r') as f:
+                    for line in f:
+                        parts = line.strip().split()
+                        if parts[0] == "ORIGINAL_FILENAME" and len(parts) > 1:
+                            global ORIGINAL_FILENAME
+                            ORIGINAL_FILENAME = parts[1]
+                            print(f"Nombre original del archivo: {ORIGINAL_FILENAME}")
+                        elif len(parts) == 2:
+                            name, hashval = parts
+                            DOWNLOADED_CHECKSUMS[name] = hashval
+                
+                print(f"Cargados {len(DOWNLOADED_CHECKSUMS)} checksums desde {checksums_path}")
+                # Iniciar modo solo compartir
+                start_share_only_mode()
+                return
+            else:
+                print("Error: No se encontró checksums.txt. No se puede iniciar en modo compartir sin datos.")
+                return
+        except Exception as e:
+            print(f"Error al iniciar modo compartir: {e}")
+            return
     
     # Dar un pequeño tiempo para que el mini-seeder inicie.
     time.sleep(1)
@@ -556,6 +686,67 @@ def start_leecher():
 
     # 7. Reconstruye el archivo completo a partir de los chunks descargados.
     reconstruction_successful = reconstruct_file()
+
+    # Asegurarnos de que el código para las opciones se ejecuta
+    if reconstruction_successful:
+        print("\n==== DESCARGA Y RECONSTRUCCIÓN COMPLETADAS ====")
+        print("¿Qué deseas hacer ahora con los chunks descargados?")
+        print("1. Continuar compartiendo indefinidamente (hasta Ctrl+C)")
+        print("2. Compartir por un tiempo limitado")
+        print("3. Terminar y dejar de compartir")
+        
+        try:
+            choice = input("Selecciona una opción (1-3): ")
+            
+            if choice == "1":
+                print("\nHas elegido compartir indefinidamente.")
+                print("Los chunks seguirán disponibles para otros usuarios.")
+                print("Para terminar la compartición, presiona Ctrl+C en cualquier momento.")
+                start_share_only_mode()
+            elif choice == "2":
+                try:
+                    minutes = int(input("\n¿Por cuántos minutos deseas compartir? "))
+                    if minutes <= 0:
+                        raise ValueError("El tiempo debe ser un número positivo")
+                    
+                    print(f"\nCompartiendo chunks durante {minutes} minutos.")
+                    print(f"El programa se cerrará automáticamente después de este tiempo.")
+                    
+                    # Iniciar el temporizador
+                    def auto_stop():
+                        global exit_flag
+                        for remaining in range(minutes * 60, 0, -1):
+                            if exit_flag:
+                                break
+                            mins, secs = divmod(remaining, 60)
+                            if remaining % 60 == 0:  # Mostrar cada minuto
+                                print(f"\nTiempo restante de compartición: {mins} minutos")
+                            time.sleep(1)
+                        
+                        if not exit_flag:
+                            print("\nTiempo de compartición completado. Cerrando programa...")
+                            exit_flag = True
+                    
+                    timer_thread = threading.Thread(target=auto_stop, daemon=True)
+                    timer_thread.start()
+                    
+                    # Iniciar modo compartir
+                    start_share_only_mode()
+                except ValueError as e:
+                    print(f"\nError: {e}")
+                    print("Se utilizará el modo de compartición indefinida.")
+                    start_share_only_mode()
+            else:
+                print("\nHas elegido no compartir. El programa se cerrará ahora.")
+                print("¡Gracias por usar nuestro sistema P2P!")
+                exit_flag = True
+                time.sleep(1)  # Dar tiempo para que los hilos terminen
+        except KeyboardInterrupt:
+            print("\nSelección cancelada. El programa se cerrará.")
+            exit_flag = True
+    else:
+        print("\nLa reconstrucción del archivo falló. Se detendrá el programa.")
+        exit_flag = True
 
     print("Proceso de leecher completado.")
 
