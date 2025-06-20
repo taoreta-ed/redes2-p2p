@@ -123,7 +123,7 @@ def handle_client(conn, addr):
 # Función para mostrar periódicamente estadísticas en la consola del tracker
 def stats_monitor():
     while True:
-        time.sleep(10)  # Actualizar cada 10 segundos
+        time.sleep(15)  # Actualizar cada 10 segundos
         with connection_lock:
             print(f"\n--- ESTADÍSTICAS DEL TRACKER ---")
             print(f"Conexiones activas: {active_connections}")
@@ -139,7 +139,7 @@ def start_tracker():
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         
         s.bind(("", TRACKER_PORT)) # Escucha en todas las interfaces de red.
-        s.listen(50)              # Aumentado a 50 conexiones pendientes.
+        s.listen(55)               # Aumentado a 55 conexiones pendientes.
         print(f"Tracker escuchando en el puerto {TRACKER_PORT}")
         
         # Iniciar hilo para mostrar estadísticas periódicamente

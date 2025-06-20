@@ -4,7 +4,7 @@ import time
 import ast
 
 # Dirección IP y puerto del tracker
-TRACKER_IP = "8.12.0.166"
+TRACKER_IP = "127.0.0.1"
 TRACKER_PORT = 8000
 
 def get_tracker_stats():
